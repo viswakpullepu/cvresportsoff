@@ -11,31 +11,36 @@ export function useListAllGames() {
       return actor.listAllGames();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 5_000,
   });
 }
 
 export function useListOpenGames() {
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
   return useQuery({
     queryKey: ["openGames"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.listOpenGames();
     },
-    enabled: !!actor && !isFetching,
+    enabled: !!actor,
+    staleTime: 5_000,
   });
 }
 
 export function useGetGame(gameId: bigint | null) {
-  const { actor, isFetching } = useActor();
-  return useQuery({
+  const { actor, isFetching: actorFetching } = useActor();
+  const query = useQuery({
     queryKey: ["game", gameId?.toString()],
     queryFn: async () => {
       if (!actor || gameId === null) throw new Error("No actor or gameId");
       return actor.getGame(gameId);
     },
-    enabled: !!actor && !isFetching && gameId !== null,
+    enabled: !!actor && gameId !== null,
+    staleTime: 5_000,
+    retry: 2,
   });
+  return { ...query, isLoading: query.isLoading || actorFetching };
 }
 
 export function useIsAdmin() {

@@ -45,6 +45,7 @@ import {
   Trash2,
   Trophy,
   Users,
+  Video,
   X,
   Zap,
 } from "lucide-react";
@@ -52,6 +53,7 @@ import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { GameTile, Question } from "../backend";
+import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useCreateGame,
@@ -65,9 +67,15 @@ import {
   useUpdateGame,
   useUpdatePaymentStatus,
 } from "../hooks/useQueries";
+import {
+  deleteVideo,
+  hasVideo,
+  loadVideo,
+  saveVideo,
+} from "../utils/videoStorage";
 
 const getAdminPassword = () =>
-  localStorage.getItem("cvr_admin_password") || "CVR@esports2026";
+  localStorage.getItem("cvr_admin_password") || "000";
 
 const EMPTY_GAME: Omit<GameTile, "id"> = {
   title: "",
@@ -244,6 +252,13 @@ function GameEditDialog({
   const [form, setForm] = useState<Omit<GameTile, "id"> & { id?: bigint }>(
     game,
   );
+  const [bgVideoUrl, setBgVideoUrl] = useState<string | null>(null);
+
+  // Load bg video from IndexedDB when dialog opens
+  useEffect(() => {
+    const gameId = form.id?.toString() ?? "new";
+    loadVideo(`cvr_bgvideo_game_${gameId}`).then(setBgVideoUrl);
+  }, [form.id]);
 
   const parseQText = (
     raw: string,
@@ -313,7 +328,7 @@ function GameEditDialog({
       toast.error("Title is required");
       return;
     }
-    onSave({ id: form.id ?? BigInt(0), ...form });
+    onSave({ ...form, id: form.id ?? BigInt(0) } as GameTile);
   };
 
   return (
@@ -401,15 +416,130 @@ function GameEditDialog({
 
           <div className="space-y-1.5">
             <Label className="font-display text-xs text-muted-foreground">
-              BANNER URL (optional)
+              BANNER IMAGE (optional)
             </Label>
-            <Input
-              value={form.bannerUrl}
-              onChange={(e) => updateField("bannerUrl", e.target.value)}
-              placeholder="https://..."
-              className="bg-secondary border-border text-sm"
-              data-ocid="game_edit.input"
-            />
+            <div className="space-y-2">
+              {form.bannerUrl && (
+                <div className="relative">
+                  <img
+                    src={
+                      form.bannerUrl.startsWith("local:")
+                        ? localStorage.getItem(
+                            `cvr_banner_${form.bannerUrl.slice(6)}`,
+                          ) || ""
+                        : form.bannerUrl
+                    }
+                    alt="Banner preview"
+                    className="w-full h-24 object-cover rounded border border-border"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-1 right-1 w-6 h-6"
+                    onClick={() => {
+                      if (form.bannerUrl?.startsWith("local:")) {
+                        localStorage.removeItem(
+                          `cvr_banner_${form.bannerUrl.slice(6)}`,
+                        );
+                      }
+                      updateField("bannerUrl", "");
+                    }}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                id="banner-upload-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const base64 = ev.target?.result as string;
+                    const key = `banner_${Date.now()}`;
+                    localStorage.setItem(`cvr_banner_${key}`, base64);
+                    updateField("bannerUrl", `local:${key}`);
+                  };
+                  reader.readAsDataURL(file);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full text-xs border-dashed"
+                onClick={() =>
+                  document.getElementById("banner-upload-input")?.click()
+                }
+              >
+                <ImagePlus className="w-4 h-4 mr-2" />
+                {form.bannerUrl ? "CHANGE BANNER" : "UPLOAD BANNER"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="font-display text-xs text-muted-foreground">
+              BACKGROUND VIDEO (optional, unique per game)
+            </Label>
+            <div className="space-y-2">
+              {bgVideoUrl && (
+                <div className="relative">
+                  <video
+                    src={bgVideoUrl}
+                    className="w-full h-24 object-cover rounded border border-border"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-1 right-1 w-6 h-6"
+                    onClick={() => {
+                      const gameId = form.id?.toString() ?? "new";
+                      deleteVideo(`cvr_bgvideo_game_${gameId}`).then(() => {
+                        setBgVideoUrl(null);
+                      });
+                    }}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                id="bgvideo-upload-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const gameId = form.id?.toString() ?? "new";
+                  saveVideo(`cvr_bgvideo_game_${gameId}`, file).then(() => {
+                    loadVideo(`cvr_bgvideo_game_${gameId}`).then(setBgVideoUrl);
+                  });
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full text-xs border-dashed"
+                onClick={() =>
+                  document.getElementById("bgvideo-upload-input")?.click()
+                }
+              >
+                <Video className="w-4 h-4 mr-2" />
+                {bgVideoUrl ? "CHANGE BG VIDEO" : "UPLOAD BG VIDEO"}
+              </Button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
@@ -646,12 +776,37 @@ function useSessionTimer(loginTime: number) {
   return elapsed;
 }
 
+const ADMIN_CACHE_KEY = "cvr_games_cache";
+function adminSafeParse(raw: string): GameTile[] {
+  try {
+    return JSON.parse(raw, (_key, value) =>
+      value && typeof value === "object" && "__bigint__" in value
+        ? BigInt((value as { __bigint__: string }).__bigint__)
+        : value,
+    ) as GameTile[];
+  } catch {
+    return [];
+  }
+}
+
 // ── AdminPage ────────────────────────────────────────────────────────────────
 export default function AdminPage() {
   const navigate = useNavigate();
   const { identity, login, loginStatus, clear } = useInternetIdentity();
   const { isLoading: adminLoading } = useIsAdmin();
-  const { data: games, isLoading: gamesLoading } = useListAllGames();
+  const [cachedGames, setCachedGames] = useState<GameTile[]>(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_CACHE_KEY);
+      if (raw) return adminSafeParse(raw);
+    } catch {
+      /* ignore */
+    }
+    return [];
+  });
+  const { actor, isFetching: actorFetching } = useActor();
+  const { data: backendGames, isLoading: gamesLoading } = useListAllGames();
+  const games =
+    backendGames && backendGames.length > 0 ? backendGames : cachedGames;
   const { data: stripeConfigured } = useIsStripeConfigured();
 
   const createGame = useCreateGame();
@@ -737,17 +892,36 @@ export default function AdminPage() {
   const bgFileRef = useRef<HTMLInputElement>(null);
 
   const handleSaveGame = async (game: GameTile) => {
+    if (!actor) {
+      toast.error(
+        "Still connecting to network, please wait a moment and try again.",
+      );
+      return;
+    }
     try {
-      if (game.id === BigInt(0)) {
+      const isNew = !game.id || game.id === BigInt(0);
+      // Use strict BigInt equality for ID comparison
+      const existsInBackend = backendGames?.some(
+        (g) => BigInt(g.id) === BigInt(game.id),
+      );
+
+      if (isNew) {
         await createGame.mutateAsync(game);
         toast.success("Game created!");
-      } else {
+      } else if (existsInBackend) {
         await updateGame.mutateAsync(game);
         toast.success("Game updated!");
+      } else {
+        // Not in backend (canister may have been reset) — recreate it
+        await createGame.mutateAsync(game);
+        toast.success("Game saved!");
       }
+      localStorage.removeItem("cvr_games_cache");
+      setCachedGames([]);
       setEditingGame(null);
-    } catch {
-      toast.error("Failed to save game");
+    } catch (err) {
+      console.error("Save game error:", err);
+      toast.error("Failed to save game. Please try again.");
     }
   };
 
@@ -1022,7 +1196,61 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
+      {/* Animated Background */}
+      <div className="fixed inset-0 -z-10 overflow-hidden bg-background">
+        <div
+          style={{
+            position: "absolute",
+            top: "-10%",
+            left: "-10%",
+            width: "600px",
+            height: "600px",
+            background:
+              "radial-gradient(circle, oklch(0.65 0.22 40 / 0.18) 0%, transparent 70%)",
+            filter: "blur(40px)",
+            animation: "orbFloat1 28s ease-in-out infinite",
+            willChange: "transform",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: "-10%",
+            right: "-10%",
+            width: "500px",
+            height: "500px",
+            background:
+              "radial-gradient(circle, oklch(0.78 0.18 195 / 0.15) 0%, transparent 70%)",
+            filter: "blur(40px)",
+            animation: "orbFloat2 22s ease-in-out infinite 4s",
+            willChange: "transform",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: "40%",
+            right: "15%",
+            width: "400px",
+            height: "400px",
+            background:
+              "radial-gradient(circle, oklch(0.65 0.22 40 / 0.10) 0%, transparent 70%)",
+            filter: "blur(50px)",
+            animation: "orbFloat3 32s ease-in-out infinite 8s",
+            willChange: "transform",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage:
+              "linear-gradient(oklch(0.78 0.18 195 / 0.04) 1px, transparent 1px), linear-gradient(90deg, oklch(0.78 0.18 195 / 0.04) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }}
+        />
+      </div>
       {/* Header */}
       <header className="sticky top-0 z-50 bg-steel-dark/95 backdrop-blur border-b border-border/50">
         <div className="max-w-[430px] mx-auto px-4 h-14 flex items-center justify-between">
@@ -1625,7 +1853,9 @@ export default function AdminPage() {
           open={!!editingGame}
           onClose={() => setEditingGame(null)}
           onSave={handleSaveGame}
-          isSaving={createGame.isPending || updateGame.isPending}
+          isSaving={
+            createGame.isPending || updateGame.isPending || actorFetching
+          }
         />
       )}
 

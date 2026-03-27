@@ -54,6 +54,20 @@ actor {
     owner : Principal;
   };
 
+  // V2 type with paymentScreenshotUrl
+  type RegistrationV2 = {
+    id : Nat;
+    gameId : Nat;
+    playerName : Text;
+    uid : Text;
+    inGameName : Text;
+    answers : [Answer];
+    paymentStatus : Text;
+    createdAt : Time.Time;
+    owner : Principal;
+    paymentScreenshotUrl : ?Text;
+  };
+
   public type Registration = {
     id : Nat;
     gameId : Nat;
@@ -65,6 +79,7 @@ actor {
     createdAt : Time.Time;
     owner : Principal;
     paymentScreenshotUrl : ?Text;
+    transactionId : Text;
   };
 
   public type UserProfile = {
@@ -79,18 +94,23 @@ actor {
   let gameTiles = Map.empty<Nat, GameTile>();
   // Legacy stable var — receives old data on upgrade (no paymentScreenshotUrl field)
   let registrations = Map.empty<Nat, RegistrationV1>();
-  // New stable var — used for all reads/writes going forward
-  let registrationsV2 = Map.empty<Nat, Registration>();
+  // V2 stable var
+  let registrationsV2 = Map.empty<Nat, RegistrationV2>();
+  // Current stable var with transactionId
+  let registrationsV3 = Map.empty<Nat, Registration>();
+  // Transaction ID dedup map
+  let usedTransactionIds = Map.empty<Text, Nat>();
   let globalQuestions = Map.empty<Nat, Question>();
   let userProfiles = Map.empty<Principal, UserProfile>();
   var stripeConfig : ?Stripe.StripeConfiguration = null;
   var migrationDone = false;
+  var migrationV2Done = false;
 
-  // Migrate V1 records into V2 on first upgrade
+  // Migrate V1 -> V2 on first upgrade
   system func postupgrade() {
     if (not migrationDone) {
       for ((k, v) in registrations.entries()) {
-        let migrated : Registration = {
+        let migrated : RegistrationV2 = {
           id = v.id;
           gameId = v.gameId;
           playerName = v.playerName;
@@ -109,6 +129,28 @@ actor {
       };
       migrationDone := true;
     };
+    if (not migrationV2Done) {
+      for ((k, v) in registrationsV2.entries()) {
+        let migrated : Registration = {
+          id = v.id;
+          gameId = v.gameId;
+          playerName = v.playerName;
+          uid = v.uid;
+          inGameName = v.inGameName;
+          answers = v.answers;
+          paymentStatus = v.paymentStatus;
+          createdAt = v.createdAt;
+          owner = v.owner;
+          paymentScreenshotUrl = v.paymentScreenshotUrl;
+          transactionId = "";
+        };
+        registrationsV3.add(k, migrated);
+        if (v.id + 1 > nextRegistrationId) {
+          nextRegistrationId := v.id + 1;
+        };
+      };
+      migrationV2Done := true;
+    };
   };
 
   // Game Management (open to all callers — security enforced by frontend password)
@@ -126,6 +168,7 @@ actor {
     if (not gameTiles.containsKey(game.id)) {
       Runtime.trap("Game not found");
     };
+    gameTiles.remove(game.id);
     gameTiles.add(game.id, game);
   };
 
@@ -152,8 +195,19 @@ actor {
     };
   };
 
+  // Transaction ID validation
+  public query func checkTransactionId(txId : Text) : async Bool {
+    if (txId == "") { return false };
+    usedTransactionIds.containsKey(txId);
+  };
+
   // Registration
   public shared ({ caller }) func submitRegistration(reg : Registration) : async Nat {
+    // Validate transaction ID uniqueness
+    if (reg.transactionId != "" and usedTransactionIds.containsKey(reg.transactionId)) {
+      Runtime.trap("DUPLICATE_TRANSACTION_ID");
+    };
+
     let newReg : Registration = {
       reg with
       id = nextRegistrationId;
@@ -161,31 +215,34 @@ actor {
       paymentStatus = "pending";
       owner = caller;
     };
-    registrationsV2.add(nextRegistrationId, newReg);
+    registrationsV3.add(nextRegistrationId, newReg);
+    if (reg.transactionId != "") {
+      usedTransactionIds.add(reg.transactionId, nextRegistrationId);
+    };
     nextRegistrationId += 1;
     newReg.id;
   };
 
   public query func getRegistration(regId : Nat) : async Registration {
-    switch (registrationsV2.get(regId)) {
+    switch (registrationsV3.get(regId)) {
       case (null) { Runtime.trap("Registration not found") };
       case (?reg) { reg };
     };
   };
 
   public query func getGameRegistrations(gameId : Nat) : async [Registration] {
-    registrationsV2.values().toArray().filter(func(r) { r.gameId == gameId });
+    registrationsV3.values().toArray().filter(func(r) { r.gameId == gameId });
   };
 
   public shared func updatePaymentStatus(regId : Nat, status : Text) : async () {
-    switch (registrationsV2.get(regId)) {
+    switch (registrationsV3.get(regId)) {
       case (null) { Runtime.trap("Registration not found") };
       case (?reg) {
         let updatedReg : Registration = {
           reg with
           paymentStatus = status;
         };
-        registrationsV2.add(regId, updatedReg);
+        registrationsV3.add(regId, updatedReg);
       };
     };
   };

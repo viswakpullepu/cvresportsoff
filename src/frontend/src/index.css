@@ -7,38 +7,39 @@
 @layer base {
   :root {
     --radius: 0.5rem;
-    /* Dark cinematic theme - always dark */
-    --background: 0.09 0 0;
+    /* Dark esports theme - ultra dark */
+    --background: 0.07 0 0;
     --foreground: 0.95 0 0;
-    --card: 0.13 0 0;
+    --card: 0.1 0 0;
     --card-foreground: 0.95 0 0;
-    --popover: 0.13 0 0;
+    --popover: 0.1 0 0;
     --popover-foreground: 0.95 0 0;
     --primary: 0.65 0.22 40;
     --primary-foreground: 0.98 0 0;
-    --secondary: 0.17 0 0;
+    --secondary: 0.13 0 0;
     --secondary-foreground: 0.95 0 0;
-    --muted: 0.17 0 0;
-    --muted-foreground: 0.65 0 0;
+    --muted: 0.13 0 0;
+    --muted-foreground: 0.6 0 0;
     --accent: 0.65 0.22 40;
     --accent-foreground: 0.98 0 0;
+    --accent-cyan: 0.78 0.18 195;
     --destructive: 0.577 0.245 27.325;
     --destructive-foreground: 0.985 0 0;
-    --border: 0.22 0 0;
-    --input: 0.18 0 0;
+    --border: 0.18 0 0;
+    --input: 0.15 0 0;
     --ring: 0.65 0.22 40;
     --chart-1: 0.65 0.22 40;
     --chart-2: 0.6 0.118 184.704;
     --chart-3: 0.398 0.07 227.392;
     --chart-4: 0.828 0.189 84.429;
     --chart-5: 0.769 0.188 70.08;
-    --sidebar: 0.11 0 0;
+    --sidebar: 0.09 0 0;
     --sidebar-foreground: 0.95 0 0;
     --sidebar-primary: 0.65 0.22 40;
     --sidebar-primary-foreground: 0.98 0 0;
-    --sidebar-accent: 0.17 0 0;
+    --sidebar-accent: 0.13 0 0;
     --sidebar-accent-foreground: 0.95 0 0;
-    --sidebar-border: 0.22 0 0;
+    --sidebar-border: 0.18 0 0;
     --sidebar-ring: 0.65 0.22 40;
   }
 
@@ -78,9 +79,19 @@
       oklch(0.65 0.22 40 / 0.2);
   }
 
+  .glow-cyan {
+    box-shadow: 0 0 12px oklch(0.78 0.18 195 / 0.6), 0 0 30px
+      oklch(0.78 0.18 195 / 0.25);
+  }
+
   .text-glow-orange {
     text-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.8), 0 0 24px
       oklch(0.65 0.22 40 / 0.4);
+  }
+
+  .text-glow-cyan {
+    text-shadow: 0 0 12px oklch(0.78 0.18 195 / 0.8), 0 0 24px
+      oklch(0.78 0.18 195 / 0.4);
   }
 
   .border-glow {
@@ -97,9 +108,9 @@
   .hero-overlay {
     background: linear-gradient(
       to bottom,
-      oklch(0.09 0 0 / 0.4) 0%,
-      oklch(0.09 0 0 / 0.7) 50%,
-      oklch(0.09 0 0 / 0.95) 100%
+      oklch(0.07 0 0 / 0.4) 0%,
+      oklch(0.07 0 0 / 0.7) 50%,
+      oklch(0.07 0 0 / 0.95) 100%
     );
   }
 
@@ -116,7 +127,7 @@
   }
 
   .card-game {
-    background: linear-gradient(135deg, oklch(0.14 0 0), oklch(0.11 0 0));
+    background: linear-gradient(135deg, oklch(0.11 0 0), oklch(0.08 0 0));
     border: 1px solid oklch(0.65 0.22 40 / 0.4);
     box-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.15), 0 4px 20px
       oklch(0 0 0 / 0.5);
@@ -158,6 +169,56 @@
   .btn-outline-orange:hover {
     background: oklch(0.65 0.22 40 / 0.1);
     box-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.4);
+  }
+
+  .scanline-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0 0 0 / 0.08) 2px,
+      oklch(0 0 0 / 0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+/* ── Animated Background Orbs ──────────────────────────────────────────── */
+@keyframes orbFloat1 {
+  0%,
+  100% {
+    transform: translate(0%, 0%) scale(1);
+  }
+  33% {
+    transform: translate(8%, -12%) scale(1.1);
+  }
+  66% {
+    transform: translate(-5%, 8%) scale(0.95);
+  }
+}
+@keyframes orbFloat2 {
+  0%,
+  100% {
+    transform: translate(0%, 0%) scale(1);
+  }
+  33% {
+    transform: translate(-10%, 6%) scale(1.08);
+  }
+  66% {
+    transform: translate(12%, -8%) scale(0.92);
+  }
+}
+@keyframes orbFloat3 {
+  0%,
+  100% {
+    transform: translate(0%, 0%) scale(1);
+  }
+  50% {
+    transform: translate(6%, 10%) scale(1.05);
   }
 }
 
@@ -234,15 +295,23 @@
 
   .float-drift-1 {
     animation: floatDrift1 9s ease-in-out infinite;
+    will-change: transform;
+    contain: layout style;
   }
   .float-drift-2 {
     animation: floatDrift2 13s ease-in-out infinite 2s;
+    will-change: transform;
+    contain: layout style;
   }
   .float-drift-3 {
     animation: floatDrift3 11s ease-in-out infinite 1s;
+    will-change: transform;
+    contain: layout style;
   }
   .float-drift-4 {
     animation: floatDrift4 15s ease-in-out infinite 3s;
+    will-change: transform;
+    contain: layout style;
   }
 }
 
@@ -261,4 +330,7 @@
   overflow: hidden;
   pointer-events: none;
   z-index: 1;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }

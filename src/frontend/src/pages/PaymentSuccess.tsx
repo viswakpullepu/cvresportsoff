@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckCircle, Loader2, Shield, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import {
@@ -33,8 +33,11 @@ export default function PaymentSuccessPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-50 bg-steel-dark/95 backdrop-blur border-b border-border/50">
         <div className="max-w-[430px] mx-auto px-4 h-14 flex items-center gap-2">
-          <Shield className="w-5 h-5 text-orange-glow" fill="currentColor" />
-          <span className="font-display text-sm font-bold">CVRESPORTSOFF</span>
+          <img
+            src="/assets/uploads/file_0000000036c871fa907a38c9391d7ff1-019d2d6c-afb4-74ed-9daa-5e79002c5aee-1.png"
+            alt="CVR eSports Logo"
+            className="h-9 w-auto object-contain"
+          />
         </div>
       </header>
 
