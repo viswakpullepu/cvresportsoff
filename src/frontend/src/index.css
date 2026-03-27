@@ -1,0 +1,264 @@
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    /* Dark cinematic theme - always dark */
+    --background: 0.09 0 0;
+    --foreground: 0.95 0 0;
+    --card: 0.13 0 0;
+    --card-foreground: 0.95 0 0;
+    --popover: 0.13 0 0;
+    --popover-foreground: 0.95 0 0;
+    --primary: 0.65 0.22 40;
+    --primary-foreground: 0.98 0 0;
+    --secondary: 0.17 0 0;
+    --secondary-foreground: 0.95 0 0;
+    --muted: 0.17 0 0;
+    --muted-foreground: 0.65 0 0;
+    --accent: 0.65 0.22 40;
+    --accent-foreground: 0.98 0 0;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+    --border: 0.22 0 0;
+    --input: 0.18 0 0;
+    --ring: 0.65 0.22 40;
+    --chart-1: 0.65 0.22 40;
+    --chart-2: 0.6 0.118 184.704;
+    --chart-3: 0.398 0.07 227.392;
+    --chart-4: 0.828 0.189 84.429;
+    --chart-5: 0.769 0.188 70.08;
+    --sidebar: 0.11 0 0;
+    --sidebar-foreground: 0.95 0 0;
+    --sidebar-primary: 0.65 0.22 40;
+    --sidebar-primary-foreground: 0.98 0 0;
+    --sidebar-accent: 0.17 0 0;
+    --sidebar-accent-foreground: 0.95 0 0;
+    --sidebar-border: 0.22 0 0;
+    --sidebar-ring: 0.65 0.22 40;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Inter", sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Oswald", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+@layer utilities {
+  .glow-orange {
+    box-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.6), 0 0 30px
+      oklch(0.65 0.22 40 / 0.25);
+  }
+
+  .glow-orange-sm {
+    box-shadow: 0 0 6px oklch(0.65 0.22 40 / 0.5), 0 0 16px
+      oklch(0.65 0.22 40 / 0.2);
+  }
+
+  .text-glow-orange {
+    text-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.8), 0 0 24px
+      oklch(0.65 0.22 40 / 0.4);
+  }
+
+  .border-glow {
+    border-color: oklch(0.65 0.22 40);
+    box-shadow: 0 0 8px oklch(0.65 0.22 40 / 0.4), inset 0 0 8px
+      oklch(0.65 0.22 40 / 0.05);
+  }
+
+  .font-display {
+    font-family: "Oswald", sans-serif;
+    text-transform: uppercase;
+  }
+
+  .hero-overlay {
+    background: linear-gradient(
+      to bottom,
+      oklch(0.09 0 0 / 0.4) 0%,
+      oklch(0.09 0 0 / 0.7) 50%,
+      oklch(0.09 0 0 / 0.95) 100%
+    );
+  }
+
+  .metal-divider {
+    background: linear-gradient(
+      to right,
+      transparent,
+      oklch(0.65 0.22 40 / 0.6),
+      oklch(0.65 0.22 40),
+      oklch(0.65 0.22 40 / 0.6),
+      transparent
+    );
+    height: 1px;
+  }
+
+  .card-game {
+    background: linear-gradient(135deg, oklch(0.14 0 0), oklch(0.11 0 0));
+    border: 1px solid oklch(0.65 0.22 40 / 0.4);
+    box-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.15), 0 4px 20px
+      oklch(0 0 0 / 0.5);
+  }
+
+  .card-game:hover {
+    border-color: oklch(0.65 0.22 40 / 0.8);
+    box-shadow: 0 0 20px oklch(0.65 0.22 40 / 0.35), 0 8px 30px
+      oklch(0 0 0 / 0.6);
+  }
+
+  .btn-primary {
+    background: linear-gradient(
+      135deg,
+      oklch(0.65 0.22 40),
+      oklch(0.68 0.21 45)
+    );
+    color: oklch(0.98 0 0);
+    font-family: "Oswald", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    box-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.4);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 20px oklch(0.65 0.22 40 / 0.7);
+    filter: brightness(1.1);
+  }
+
+  .btn-outline-orange {
+    background: transparent;
+    border: 1px solid oklch(0.65 0.22 40);
+    color: oklch(0.65 0.22 40);
+    font-family: "Oswald", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .btn-outline-orange:hover {
+    background: oklch(0.65 0.22 40 / 0.1);
+    box-shadow: 0 0 12px oklch(0.65 0.22 40 / 0.4);
+  }
+}
+
+/* ── Floating Battlefield Elements ─────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes floatDrift1 {
+    0% {
+      transform: translateY(0px) rotate(0deg);
+      opacity: 0.1;
+    }
+    33% {
+      transform: translateY(-18px) rotate(8deg);
+      opacity: 0.14;
+    }
+    66% {
+      transform: translateY(-8px) rotate(-4deg);
+      opacity: 0.09;
+    }
+    100% {
+      transform: translateY(0px) rotate(0deg);
+      opacity: 0.1;
+    }
+  }
+  @keyframes floatDrift2 {
+    0% {
+      transform: translateY(0px) rotate(0deg) scale(1);
+      opacity: 0.09;
+    }
+    40% {
+      transform: translateY(-22px) rotate(-10deg) scale(1.05);
+      opacity: 0.13;
+    }
+    80% {
+      transform: translateY(-6px) rotate(5deg) scale(0.97);
+      opacity: 0.08;
+    }
+    100% {
+      transform: translateY(0px) rotate(0deg) scale(1);
+      opacity: 0.09;
+    }
+  }
+  @keyframes floatDrift3 {
+    0% {
+      transform: translateY(0px) rotate(0deg);
+      opacity: 0.12;
+    }
+    50% {
+      transform: translateY(-14px) rotate(15deg);
+      opacity: 0.07;
+    }
+    100% {
+      transform: translateY(0px) rotate(0deg);
+      opacity: 0.12;
+    }
+  }
+  @keyframes floatDrift4 {
+    0% {
+      transform: translateY(0px) rotate(0deg) scale(1);
+      opacity: 0.08;
+    }
+    35% {
+      transform: translateY(-28px) rotate(-6deg) scale(1.08);
+      opacity: 0.12;
+    }
+    70% {
+      transform: translateY(-10px) rotate(3deg) scale(0.95);
+      opacity: 0.06;
+    }
+    100% {
+      transform: translateY(0px) rotate(0deg) scale(1);
+      opacity: 0.08;
+    }
+  }
+
+  .float-drift-1 {
+    animation: floatDrift1 9s ease-in-out infinite;
+  }
+  .float-drift-2 {
+    animation: floatDrift2 13s ease-in-out infinite 2s;
+  }
+  .float-drift-3 {
+    animation: floatDrift3 11s ease-in-out infinite 1s;
+  }
+  .float-drift-4 {
+    animation: floatDrift4 15s ease-in-out infinite 3s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-drift-1,
+  .float-drift-2,
+  .float-drift-3,
+  .float-drift-4 {
+    animation: none;
+  }
+}
+
+.floating-elements-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
