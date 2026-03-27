@@ -37,6 +37,8 @@ export interface Registration {
   'createdAt' : Time,
   'gameId' : bigint,
   'playerName' : string,
+  'transactionId' : string,
+  'paymentScreenshotUrl' : [] | [string],
 }
 export interface ShoppingItem {
   'productName' : string,
@@ -63,6 +65,7 @@ export interface TransformationOutput {
   'body' : Uint8Array,
   'headers' : Array<http_header>,
 }
+export interface Sponsor { 'id' : bigint, 'name' : string, 'mediaUrl' : string, 'mediaType' : string }
 export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
@@ -80,6 +83,7 @@ export interface _SERVICE {
     [Array<ShoppingItem>, string, string],
     string
   >,
+  'checkTransactionId' : ActorMethod<[string], boolean>,
   'createGame' : ActorMethod<[GameTile], bigint>,
   'createQuestion' : ActorMethod<[Question], bigint>,
   'deleteGame' : ActorMethod<[bigint], undefined>,
@@ -104,6 +108,9 @@ export interface _SERVICE {
   'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
   'updateGame' : ActorMethod<[GameTile], undefined>,
   'updatePaymentStatus' : ActorMethod<[bigint, string], undefined>,
+  'addSponsor' : ActorMethod<[string, string, string], bigint>,
+  'deleteSponsor' : ActorMethod<[bigint], boolean>,
+  'getSponsors' : ActorMethod<[], Array<Sponsor>>,
   'updateQuestion' : ActorMethod<[Question], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;

@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { HttpAgent } from "@icp-sdk/core/agent";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -53,6 +54,7 @@ import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { GameTile, Question } from "../backend";
+import { createActorWithConfig, loadConfig } from "../config";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
@@ -67,6 +69,7 @@ import {
   useUpdateGame,
   useUpdatePaymentStatus,
 } from "../hooks/useQueries";
+import { StorageClient } from "../utils/StorageClient";
 import {
   deleteVideo,
   hasVideo,
@@ -246,13 +249,14 @@ function GameEditDialog({
   game: Partial<GameTile> & typeof EMPTY_GAME;
   open: boolean;
   onClose: () => void;
-  onSave: (g: GameTile) => void;
+  onSave: (g: GameTile, isNew: boolean) => void;
   isSaving: boolean;
 }) {
   const [form, setForm] = useState<Omit<GameTile, "id"> & { id?: bigint }>(
     game,
   );
   const [bgVideoUrl, setBgVideoUrl] = useState<string | null>(null);
+  const [bannerUploading, setBannerUploading] = useState(false);
 
   // Load bg video from IndexedDB when dialog opens
   useEffect(() => {
@@ -260,31 +264,18 @@ function GameEditDialog({
     loadVideo(`cvr_bgvideo_game_${gameId}`).then(setBgVideoUrl);
   }, [form.id]);
 
-  const parseQText = (
-    raw: string,
-  ): { text: string; imageUrl?: string; imageRef?: string } => {
+  const parseQText = (raw: string): { text: string; imageUrl?: string } => {
     try {
       const p = JSON.parse(raw);
       if (typeof p.text === "string") {
-        if (p.imageRef) {
-          const storedImg = localStorage.getItem(`cvr_qimg_${p.imageRef}`);
-          return {
-            text: p.text,
-            imageUrl: storedImg || undefined,
-            imageRef: p.imageRef,
-          };
-        }
-        if (p.imageUrl) {
-          return { text: p.text, imageUrl: p.imageUrl };
-        }
-        return { text: p.text };
+        return { text: p.text, imageUrl: p.imageUrl || undefined };
       }
     } catch {}
     return { text: raw };
   };
 
-  const encodeQText = (text: string, imageRef?: string): string =>
-    imageRef ? JSON.stringify({ text, imageRef }) : text;
+  const encodeQText = (text: string, imageUrl?: string): string =>
+    imageUrl ? JSON.stringify({ text, imageUrl }) : text;
 
   const updateField = <K extends keyof typeof form>(
     key: K,
@@ -328,7 +319,8 @@ function GameEditDialog({
       toast.error("Title is required");
       return;
     }
-    onSave({ ...form, id: form.id ?? BigInt(0) } as GameTile);
+    const _isNew = form.id === undefined || form.id === null;
+    onSave({ ...form, id: form.id ?? BigInt(0) } as GameTile, _isNew);
   };
 
   return (
@@ -422,13 +414,7 @@ function GameEditDialog({
               {form.bannerUrl && (
                 <div className="relative">
                   <img
-                    src={
-                      form.bannerUrl.startsWith("local:")
-                        ? localStorage.getItem(
-                            `cvr_banner_${form.bannerUrl.slice(6)}`,
-                          ) || ""
-                        : form.bannerUrl
-                    }
+                    src={form.bannerUrl}
                     alt="Banner preview"
                     className="w-full h-24 object-cover rounded border border-border"
                   />
@@ -438,11 +424,6 @@ function GameEditDialog({
                     size="icon"
                     className="absolute top-1 right-1 w-6 h-6"
                     onClick={() => {
-                      if (form.bannerUrl?.startsWith("local:")) {
-                        localStorage.removeItem(
-                          `cvr_banner_${form.bannerUrl.slice(6)}`,
-                        );
-                      }
                       updateField("bannerUrl", "");
                     }}
                   >
@@ -455,30 +436,68 @@ function GameEditDialog({
                 accept="image/*"
                 className="hidden"
                 id="banner-upload-input"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    const base64 = ev.target?.result as string;
-                    const key = `banner_${Date.now()}`;
-                    localStorage.setItem(`cvr_banner_${key}`, base64);
-                    updateField("bannerUrl", `local:${key}`);
-                  };
-                  reader.readAsDataURL(file);
                   e.target.value = "";
+                  setBannerUploading(true);
+                  try {
+                    console.log("[Banner Upload] Starting upload...");
+                    console.log(
+                      "[Banner Upload] File:",
+                      file.name,
+                      file.type,
+                      file.size,
+                      "bytes",
+                    );
+                    const arrayBuffer = await file.arrayBuffer();
+                    const bytes = new Uint8Array(arrayBuffer);
+                    const config = await loadConfig();
+                    console.log(
+                      "[Banner Upload] Gateway URL:",
+                      config.storage_gateway_url,
+                    );
+                    const agent = new HttpAgent({ host: config.backend_host });
+                    if (config.backend_host?.includes("localhost")) {
+                      await agent.fetchRootKey().catch(() => {});
+                    }
+                    const client = new StorageClient(
+                      config.bucket_name,
+                      config.storage_gateway_url,
+                      config.backend_canister_id,
+                      config.project_id,
+                      agent,
+                    );
+                    const { hash } = await client.putFile(bytes);
+                    console.log("[Banner Upload] Hash:", hash);
+                    const url = await client.getDirectURL(hash);
+                    console.log("[Banner Upload] Public URL:", url);
+                    updateField("bannerUrl", url);
+                  } catch (err) {
+                    console.error("[Banner Upload] FAILED:", err);
+                    const msg =
+                      err instanceof Error ? err.message : String(err);
+                    toast.error(`Banner upload failed: ${msg}`);
+                  } finally {
+                    setBannerUploading(false);
+                  }
                 }}
               />
               <Button
                 type="button"
                 variant="outline"
                 className="w-full text-xs border-dashed"
+                disabled={bannerUploading}
                 onClick={() =>
                   document.getElementById("banner-upload-input")?.click()
                 }
               >
                 <ImagePlus className="w-4 h-4 mr-2" />
-                {form.bannerUrl ? "CHANGE BANNER" : "UPLOAD BANNER"}
+                {bannerUploading
+                  ? "UPLOADING..."
+                  : form.bannerUrl
+                    ? "CHANGE BANNER"
+                    : "UPLOAD BANNER"}
               </Button>
             </div>
           </div>
@@ -589,7 +608,7 @@ function GameEditDialog({
                               updateQuestion(
                                 idx,
                                 "questionText",
-                                encodeQText(e.target.value, parsed.imageRef),
+                                encodeQText(e.target.value, parsed.imageUrl),
                               )
                             }
                             placeholder="Question text"
@@ -616,11 +635,6 @@ function GameEditDialog({
                               type="button"
                               className="absolute -top-1.5 -right-1.5 bg-destructive rounded-full w-4 h-4 flex items-center justify-center text-white"
                               onClick={() => {
-                                if (parsed.imageRef) {
-                                  localStorage.removeItem(
-                                    `cvr_qimg_${parsed.imageRef}`,
-                                  );
-                                }
                                 updateQuestion(
                                   idx,
                                   "questionText",
@@ -639,29 +653,73 @@ function GameEditDialog({
                               type="file"
                               accept="image/*"
                               className="hidden"
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
                                 if (file.size > 2 * 1024 * 1024) {
                                   toast.error("Max 2 MB");
                                   return;
                                 }
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  const base64 = reader.result as string;
-                                  const key = String(Date.now());
-                                  localStorage.setItem(
-                                    `cvr_qimg_${key}`,
-                                    base64,
+                                e.target.value = "";
+                                try {
+                                  console.log(
+                                    "[Question Image Upload] Starting upload...",
+                                  );
+                                  console.log(
+                                    "[Question Image Upload] File:",
+                                    file.name,
+                                    file.type,
+                                    file.size,
+                                    "bytes",
+                                  );
+                                  const arrayBuffer = await file.arrayBuffer();
+                                  const bytes = new Uint8Array(arrayBuffer);
+                                  const config = await loadConfig();
+                                  console.log(
+                                    "[Question Image Upload] Gateway URL:",
+                                    config.storage_gateway_url,
+                                  );
+                                  const agent = new HttpAgent({
+                                    host: config.backend_host,
+                                  });
+                                  if (
+                                    config.backend_host?.includes("localhost")
+                                  ) {
+                                    await agent.fetchRootKey().catch(() => {});
+                                  }
+                                  const client = new StorageClient(
+                                    config.bucket_name,
+                                    config.storage_gateway_url,
+                                    config.backend_canister_id,
+                                    config.project_id,
+                                    agent,
+                                  );
+                                  const { hash } = await client.putFile(bytes);
+                                  console.log(
+                                    "[Question Image Upload] Hash:",
+                                    hash,
+                                  );
+                                  const url = await client.getDirectURL(hash);
+                                  console.log(
+                                    "[Question Image Upload] Public URL:",
+                                    url,
                                   );
                                   updateQuestion(
                                     idx,
                                     "questionText",
-                                    encodeQText(parsed.text, key),
+                                    encodeQText(parsed.text, url),
                                   );
-                                };
-                                reader.readAsDataURL(file);
-                                e.target.value = "";
+                                } catch (err) {
+                                  console.error(
+                                    "[Question Image Upload] FAILED:",
+                                    err,
+                                  );
+                                  const msg =
+                                    err instanceof Error
+                                      ? err.message
+                                      : String(err);
+                                  toast.error(`Image upload failed: ${msg}`);
+                                }
                               }}
                             />
                           </label>
@@ -736,6 +794,67 @@ interface StoredBgElement {
   id: string;
   dataUrl: string;
   name: string;
+}
+
+interface StoredSponsor {
+  id: string;
+  name: string;
+  mediaUrl: string;
+  mediaType: "image" | "video";
+}
+
+function useSponsors() {
+  const [sponsors, setSponsors] = useState<StoredSponsor[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchSponsors = async () => {
+    try {
+      const actor = await createActorWithConfig();
+      const list = await (actor as any).getSponsors();
+      setSponsors(
+        list.map((s) => ({
+          id: s.id.toString(),
+          name: s.name,
+          mediaUrl: s.mediaUrl,
+          mediaType: s.mediaType as "image" | "video",
+        })),
+      );
+    } catch (err) {
+      console.error("Failed to load sponsors:", err);
+    }
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fetch on mount only
+  useEffect(() => {
+    fetchSponsors();
+  }, []);
+
+  const add = async (s: StoredSponsor) => {
+    setLoading(true);
+    try {
+      const actor = await createActorWithConfig();
+      await (actor as any).addSponsor(s.name, s.mediaUrl, s.mediaType);
+      await fetchSponsors();
+    } catch (err) {
+      console.error("Failed to add sponsor:", err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      const actor = await createActorWithConfig();
+      await (actor as any).deleteSponsor(BigInt(id));
+      await fetchSponsors();
+    } catch (err) {
+      console.error("Failed to remove sponsor:", err);
+      throw err;
+    }
+  };
+
+  return { sponsors, add, remove, loading };
 }
 
 function useBgElements() {
@@ -890,8 +1009,12 @@ export default function AdminPage() {
     save: saveBgElements,
   } = useBgElements();
   const bgFileRef = useRef<HTMLInputElement>(null);
+  const sponsorFileRef = useRef<HTMLInputElement>(null);
+  const { sponsors, add: addSponsor, remove: removeSponsor } = useSponsors();
+  const [sponsorName, setSponsorName] = useState("");
+  const [sponsorUploading, setSponsorUploading] = useState(false);
 
-  const handleSaveGame = async (game: GameTile) => {
+  const handleSaveGame = async (game: GameTile, isNew = false) => {
     if (!actor) {
       toast.error(
         "Still connecting to network, please wait a moment and try again.",
@@ -899,28 +1022,33 @@ export default function AdminPage() {
       return;
     }
     try {
-      const isNew = !game.id || game.id === BigInt(0);
-      // Use strict BigInt equality for ID comparison
-      const existsInBackend = backendGames?.some(
-        (g) => BigInt(g.id) === BigInt(game.id),
-      );
-
       if (isNew) {
         await createGame.mutateAsync(game);
         toast.success("Game created!");
-      } else if (existsInBackend) {
-        await updateGame.mutateAsync(game);
-        toast.success("Game updated!");
       } else {
-        // Not in backend (canister may have been reset) — recreate it
-        await createGame.mutateAsync(game);
-        toast.success("Game saved!");
+        try {
+          await updateGame.mutateAsync(game);
+          toast.success("Game updated!");
+        } catch (updateErr) {
+          // Only fall back to createGame if the backend says the game doesn't exist.
+          // For network errors we re-throw so the user sees the real problem.
+          const errMsg = String(updateErr);
+          if (
+            errMsg.includes("Game not found") ||
+            errMsg.includes("not found")
+          ) {
+            await createGame.mutateAsync(game);
+            toast.success("Game saved!");
+          } else {
+            throw updateErr;
+          }
+        }
       }
       localStorage.removeItem("cvr_games_cache");
       setCachedGames([]);
       setEditingGame(null);
-    } catch (err) {
-      console.error("Save game error:", err);
+    } catch (_err) {
+      console.error("Save game error:", _err);
       toast.error("Failed to save game. Please try again.");
     }
   };
@@ -1699,6 +1827,176 @@ export default function AdminPage() {
                 )}
                 SAVE STRIPE CONFIG
               </Button>
+            </div>
+
+            {/* Sponsors */}
+            <div className="bg-card border border-border rounded-lg p-4 space-y-4 mb-4">
+              <h4 className="font-display text-sm text-foreground">SPONSORS</h4>
+              <p className="text-muted-foreground text-xs">
+                Add sponsor images or videos. They appear as an Instagram-style
+                slideshow on the homepage, below the tournaments section.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label className="font-display text-xs text-muted-foreground">
+                  SPONSOR NAME (optional)
+                </Label>
+                <Input
+                  value={sponsorName}
+                  onChange={(e) => setSponsorName(e.target.value)}
+                  placeholder="e.g. Red Bull, Logitech"
+                  className="bg-secondary border-border text-sm"
+                  data-ocid="sponsors.input"
+                />
+              </div>
+
+              <input
+                ref={sponsorFileRef}
+                type="file"
+                accept="image/jpeg,image/png,video/mp4"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  // File type validation
+                  const allowedTypes = ["image/jpeg", "image/png", "video/mp4"];
+                  if (!allowedTypes.includes(file.type)) {
+                    toast.error(
+                      "Invalid file type. Only JPG, PNG, and MP4 are supported.",
+                    );
+                    return;
+                  }
+                  // File size validation (5MB)
+                  if (file.size > 5 * 1024 * 1024) {
+                    toast.error("File too large. Maximum size is 5MB.");
+                    return;
+                  }
+                  e.target.value = "";
+                  setSponsorUploading(true);
+                  try {
+                    console.log("[Sponsor Upload] Starting upload...");
+                    console.log(
+                      "[Sponsor Upload] File:",
+                      file.name,
+                      file.type,
+                      file.size,
+                      "bytes",
+                    );
+                    const arrayBuffer = await file.arrayBuffer();
+                    const bytes = new Uint8Array(arrayBuffer);
+                    const config = await loadConfig();
+                    console.log(
+                      "[Sponsor Upload] Gateway URL:",
+                      config.storage_gateway_url,
+                    );
+                    const agent = new HttpAgent({ host: config.backend_host });
+                    if (config.backend_host?.includes("localhost")) {
+                      await agent.fetchRootKey().catch(() => {});
+                    }
+                    const client = new StorageClient(
+                      config.bucket_name,
+                      config.storage_gateway_url,
+                      config.backend_canister_id,
+                      config.project_id,
+                      agent,
+                    );
+                    const { hash } = await client.putFile(bytes);
+                    console.log("[Sponsor Upload] Hash:", hash);
+                    const url = await client.getDirectURL(hash);
+                    console.log("[Sponsor Upload] Public URL:", url);
+                    const mediaType = file.type.startsWith("video/")
+                      ? "video"
+                      : "image";
+                    await addSponsor({
+                      id: `sponsor_${Date.now()}`,
+                      name: sponsorName.trim(),
+                      mediaUrl: url,
+                      mediaType: mediaType as "image" | "video",
+                    });
+                    setSponsorName("");
+                    toast.success("Sponsor added!");
+                  } catch (err) {
+                    console.error("[Sponsor Upload] FAILED:", err);
+                    const msg =
+                      err instanceof Error ? err.message : String(err);
+                    toast.error(`Upload failed: ${msg}`);
+                  } finally {
+                    setSponsorUploading(false);
+                  }
+                }}
+                data-ocid="sponsors.upload_button"
+              />
+              <Button
+                variant="outline"
+                className="btn-outline-orange w-full text-xs"
+                disabled={sponsorUploading}
+                onClick={() => sponsorFileRef.current?.click()}
+                data-ocid="sponsors.upload_button"
+              >
+                {sponsorUploading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <ImagePlus className="w-4 h-4 mr-2" />
+                )}
+                {sponsorUploading
+                  ? "UPLOADING..."
+                  : "ADD SPONSOR (IMAGE / VIDEO)"}
+              </Button>
+
+              {sponsors.length === 0 ? (
+                <p
+                  className="text-muted-foreground text-xs text-center py-2"
+                  data-ocid="sponsors.empty_state"
+                >
+                  No sponsors added yet.
+                </p>
+              ) : (
+                <div className="space-y-2" data-ocid="sponsors.list">
+                  {sponsors.map((s, i) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center gap-3 bg-secondary rounded-lg px-3 py-2"
+                      data-ocid={`sponsors.item.${i + 1}`}
+                    >
+                      {s.mediaType === "video" ? (
+                        <video
+                          src={s.mediaUrl}
+                          muted
+                          className="w-12 h-8 object-cover rounded flex-shrink-0"
+                        />
+                      ) : (
+                        <img
+                          src={s.mediaUrl}
+                          alt={s.name}
+                          className="w-12 h-8 object-cover rounded flex-shrink-0"
+                        />
+                      )}
+                      <span className="text-xs text-muted-foreground flex-1 truncate">
+                        {s.name || "(no name)"}
+                      </span>
+                      <span className="text-xs text-muted-foreground/60 capitalize mr-1">
+                        {s.mediaType}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={async () => {
+                          try {
+                            await removeSponsor(s.id);
+                            toast.success("Sponsor removed");
+                          } catch {
+                            toast.error("Failed to remove sponsor");
+                          }
+                        }}
+                        aria-label={`Remove ${s.name}`}
+                        data-ocid={`sponsors.delete_button.${i + 1}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Background Elements */}

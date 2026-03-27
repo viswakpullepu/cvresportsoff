@@ -51,6 +51,8 @@ export const Registration = IDL.Record({
   'createdAt' : Time,
   'gameId' : IDL.Nat,
   'playerName' : IDL.Text,
+  'transactionId' : IDL.Text,
+  'paymentScreenshotUrl' : IDL.Opt(IDL.Text),
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 export const StripeSessionStatus = IDL.Variant({
@@ -91,6 +93,7 @@ export const idlService = IDL.Service({
       [IDL.Text],
       [],
     ),
+  'checkTransactionId' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'createGame' : IDL.Func([GameTile], [IDL.Nat], []),
   'createQuestion' : IDL.Func([Question], [IDL.Nat], []),
   'deleteGame' : IDL.Func([IDL.Nat], [], []),
@@ -174,6 +177,7 @@ export const idlFactory = ({ IDL }) => {
     'gameId' : IDL.Nat,
     'playerName' : IDL.Text,
   });
+  const Sponsor = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text, 'mediaUrl' : IDL.Text, 'mediaType' : IDL.Text });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
   const StripeSessionStatus = IDL.Variant({
     'completed' : IDL.Record({
@@ -210,7 +214,8 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [],
       ),
-    'createGame' : IDL.Func([GameTile], [IDL.Nat], []),
+    'checkTransactionId' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'createGame' : IDL.Func([GameTile], [IDL.Nat], []),
     'createQuestion' : IDL.Func([Question], [IDL.Nat], []),
     'deleteGame' : IDL.Func([IDL.Nat], [], []),
     'deleteQuestion' : IDL.Func([IDL.Nat], [], []),
@@ -246,6 +251,9 @@ export const idlFactory = ({ IDL }) => {
       ),
     'updateGame' : IDL.Func([GameTile], [], []),
     'updatePaymentStatus' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'addSponsor' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Nat], []),
+    'deleteSponsor' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'getSponsors' : IDL.Func([], [IDL.Vec(Sponsor)], ['query']),
     'updateQuestion' : IDL.Func([Question], [], []),
   });
 };

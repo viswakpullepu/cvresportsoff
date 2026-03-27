@@ -23,7 +23,8 @@ export interface Registration {
     createdAt: Time;
     gameId: bigint;
     playerName: string;
-    paymentScreenshotUrl: [string] | [];
+    transactionId: string;
+    paymentScreenshotUrl?: string | null;
 }
 export interface GameTile {
     id: bigint;
@@ -91,6 +92,7 @@ export enum UserRole {
 }
 export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    checkTransactionId(txId: string): Promise<boolean>;
     createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
     createGame(game: GameTile): Promise<bigint>;
     createQuestion(question: Question): Promise<bigint>;
@@ -117,4 +119,5 @@ export interface backendInterface {
     updateGame(game: GameTile): Promise<void>;
     updatePaymentStatus(regId: bigint, status: string): Promise<void>;
     updateQuestion(question: Question): Promise<void>;
+    _initializeAccessControlWithSecret(secret: string): Promise<void>;
 }

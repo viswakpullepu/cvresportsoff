@@ -15,8 +15,9 @@ import {
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameTile } from "../backend";
+import { createActorWithConfig } from "../config";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useListOpenGames } from "../hooks/useQueries";
 
@@ -45,17 +46,174 @@ function safeParse(raw: string): unknown {
   );
 }
 
-function resolveBannerUrl(bannerUrl: string): string {
-  if (bannerUrl.startsWith("local:")) {
-    return localStorage.getItem(`cvr_banner_${bannerUrl.slice(6)}`) || "";
-  }
-  return bannerUrl;
+// ── Sponsors types ────────────────────────────────────────────────────────
+interface StoredSponsor {
+  id: string;
+  name: string;
+  mediaUrl: string;
+  mediaType: "image" | "video";
+}
+
+// ── SponsorsSection ───────────────────────────────────────────────────────
+function SponsorsSection() {
+  const [sponsors, setSponsors] = useState<StoredSponsor[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touchStartX = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const actor = await createActorWithConfig();
+        const list = await (actor as any).getSponsors();
+        setSponsors(
+          list.map((s) => ({
+            id: s.id.toString(),
+            name: s.name,
+            mediaUrl: s.mediaUrl,
+            mediaType: s.mediaType as "image" | "video",
+          })),
+        );
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const total = sponsors.length;
+
+  const next = useCallback(() => {
+    setCurrent((c) => (c + 1) % total);
+  }, [total]);
+
+  const prev = useCallback(() => {
+    setCurrent((c) => (c - 1 + total) % total);
+  }, [total]);
+
+  // Auto-advance
+  useEffect(() => {
+    if (paused || total <= 1) return;
+    timerRef.current = setInterval(next, 4000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [paused, total, next]);
+
+  if (total === 0) return null;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const dx = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 40) dx > 0 ? next() : prev();
+  };
+
+  return (
+    <section className="px-4 pb-8" data-ocid="sponsors.section">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-orange-glow to-transparent rounded-full" />
+          <h2 className="font-display text-lg tracking-widest text-foreground">
+            SPONSORS
+          </h2>
+          <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
+        </div>
+
+        <div
+          className="relative rounded-xl overflow-hidden border border-orange-glow/30 shadow-[0_0_20px_rgba(249,115,22,0.15)] cursor-grab active:cursor-grabbing select-none"
+          style={{ aspectRatio: "16/9", maxHeight: "420px" }}
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {sponsors.map((sponsor, i) => (
+            <div
+              key={sponsor.id}
+              className="absolute inset-0 transition-opacity duration-500"
+              style={{
+                opacity: i === current ? 1 : 0,
+                pointerEvents: i === current ? "auto" : "none",
+              }}
+            >
+              {sponsor.mediaType === "video" ? (
+                <video
+                  src={sponsor.mediaUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img
+                  src={sponsor.mediaUrl}
+                  alt={sponsor.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                />
+              )}
+              {sponsor.name && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3">
+                  <p className="font-display text-sm text-white tracking-wider">
+                    {sponsor.name}
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Prev/Next buttons */}
+          {total > 1 && (
+            <>
+              <button
+                type="button"
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition-colors z-10"
+                onClick={prev}
+                aria-label="Previous sponsor"
+                data-ocid="sponsors.pagination_prev"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition-colors z-10"
+                onClick={next}
+                aria-label="Next sponsor"
+                data-ocid="sponsors.pagination_next"
+              >
+                ›
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Dot indicators */}
+        {total > 1 && (
+          <div className="flex justify-center gap-1.5 mt-3">
+            {sponsors.map((s, i) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`w-2 h-2 rounded-full transition-all duration-300 ${i === current ? "bg-orange-glow w-5" : "bg-border/60"}`}
+                onClick={() => setCurrent(i)}
+                aria-label={`Go to sponsor ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function GameCard({ game, index }: { game: GameTile; index: number }) {
   const navigate = useNavigate();
   const gradient = GAME_GRADIENTS[index % GAME_GRADIENTS.length];
-  const bannerSrc = game.bannerUrl ? resolveBannerUrl(game.bannerUrl) : "";
+  const bannerSrc = game.bannerUrl || "";
 
   return (
     <motion.div
@@ -263,7 +421,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center" data-ocid="nav.link">
             <img
-              src="/assets/uploads/file_0000000036c871fa907a38c9391d7ff1-019d2d6c-afb4-74ed-9daa-5e79002c5aee-1.png"
+              src="/assets/cvresports-logo.png"
               alt="CVR eSports Logo"
               className="h-10 w-auto object-contain"
               loading="eager"
@@ -495,13 +653,15 @@ export default function HomePage() {
         )}
       </section>
 
+      <SponsorsSection />
+
       {/* Footer */}
       <footer className="mt-auto bg-card border-t border-border/50 px-4 py-6">
         <div className="max-w-7xl mx-auto">
           {/* Brand row */}
           <div className="flex items-center gap-2 mb-4">
             <img
-              src="/assets/uploads/file_0000000036c871fa907a38c9391d7ff1-019d2d6c-afb4-74ed-9daa-5e79002c5aee-1.png"
+              src="/assets/cvresports-logo.png"
               alt="CVR eSports Logo"
               className="h-8 w-auto object-contain"
               loading="lazy"

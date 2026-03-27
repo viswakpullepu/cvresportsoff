@@ -59,6 +59,7 @@ export default function GameRegisterPage() {
   const gameId = BigInt(params.id);
   const { data: game, isLoading } = useGetGame(gameId);
   const { actor, isFetching: actorFetching } = useActor();
+  const actorError = !actor && !actorFetching;
   const { identity, login, loginStatus } = useInternetIdentity();
 
   const [playerName, setPlayerName] = useState("");
@@ -97,15 +98,12 @@ export default function GameRegisterPage() {
 
     setIsSubmitting(true);
     try {
-      // Check for duplicate transaction ID (belt-and-suspenders: catch if method not yet deployed)
+      // Check for duplicate transaction ID
       let isDuplicate = false;
       try {
-        const extActor = actor as any;
-        if (typeof extActor.checkTransactionId === "function") {
-          isDuplicate = await extActor.checkTransactionId(transactionId.trim());
-        }
+        isDuplicate = await actor.checkTransactionId(transactionId.trim());
       } catch {
-        // method not available yet, skip duplicate check
+        // skip if unavailable
       }
 
       if (isDuplicate) {
@@ -121,22 +119,23 @@ export default function GameRegisterPage() {
           answer: answers[q.id.toString()] || "",
         }));
 
-      const reg = {
+      const reg: Registration = {
         id: BigInt(0),
         playerName: playerName.trim(),
         uid: uid.trim(),
         inGameName: inGameName.trim(),
         transactionId: transactionId.trim(),
         paymentStatus: "pending",
+        paymentScreenshotUrl: null,
         owner: identity.getPrincipal(),
         answers: answerList,
         createdAt: BigInt(Date.now()) * BigInt(1_000_000),
         gameId: game.id,
-      } as Registration & { transactionId: string };
+      };
 
       let regId: bigint;
       try {
-        regId = await actor.submitRegistration(reg as Registration);
+        regId = await actor.submitRegistration(reg);
       } catch (err) {
         const errMsg = String(err);
         if (errMsg.includes("DUPLICATE_TRANSACTION_ID")) {
@@ -195,18 +194,23 @@ export default function GameRegisterPage() {
   }
 
   if (!game) {
+    const errorMsg = actorError
+      ? "CONNECTION ERROR. PLEASE REFRESH AND TRY AGAIN."
+      : "GAME NOT FOUND";
     return (
       <div
         className="min-h-screen bg-background flex items-center justify-center"
         data-ocid="register.error_state"
       >
         <div className="text-center">
-          <p className="text-muted-foreground font-display">GAME NOT FOUND</p>
+          <p className="text-muted-foreground font-display">{errorMsg}</p>
           <Button
             className="btn-primary mt-4"
-            onClick={() => navigate({ to: "/" })}
+            onClick={() =>
+              actorError ? window.location.reload() : navigate({ to: "/" })
+            }
           >
-            BACK TO HOME
+            {actorError ? "RETRY" : "BACK TO HOME"}
           </Button>
         </div>
       </div>
@@ -354,7 +358,7 @@ export default function GameRegisterPage() {
           </button>
           <div className="flex items-center">
             <img
-              src="/assets/uploads/file_0000000036c871fa907a38c9391d7ff1-019d2d6c-afb4-74ed-9daa-5e79002c5aee-1.png"
+              src="/assets/cvresports-logo.png"
               alt="CVR eSports Logo"
               className="h-9 w-auto object-contain"
             />
@@ -365,21 +369,13 @@ export default function GameRegisterPage() {
       <div className="max-w-[430px] mx-auto pb-8 relative z-[2]">
         {/* Game Banner */}
         <div className={`relative h-40 bg-gradient-to-br ${gradientClass}`}>
-          {game.bannerUrl &&
-            (() => {
-              const src = game.bannerUrl.startsWith("local:")
-                ? localStorage.getItem(
-                    `cvr_banner_${game.bannerUrl.slice(6)}`,
-                  ) || ""
-                : game.bannerUrl;
-              return src ? (
-                <img
-                  src={src}
-                  alt={game.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : null;
-            })()}
+          {game.bannerUrl && (
+            <img
+              src={game.bannerUrl}
+              alt={game.title}
+              className="w-full h-full object-cover"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center">
             <Shield className="w-16 h-16 text-orange-glow/20" />

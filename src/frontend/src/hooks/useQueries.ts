@@ -38,7 +38,8 @@ export function useGetGame(gameId: bigint | null) {
     },
     enabled: !!actor && gameId !== null,
     staleTime: 5_000,
-    retry: 2,
+    retry: 4,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
   return { ...query, isLoading: query.isLoading || actorFetching };
 }

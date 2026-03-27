@@ -434,6 +434,7 @@ class StorageGatewayClient {
 
     return await withRetry(async () => {
       const url = `${this.storageGatewayUrl}/${GATEWAY_VERSION}/blob-tree/`;
+      console.log("[StorageClient] uploadBlobTree URL:", url);
       const requestBody = {
         blob_tree: treeJSON,
         bucket_name: bucketName,
@@ -455,14 +456,28 @@ class StorageGatewayClient {
         body: JSON.stringify(requestBody),
       });
 
+      console.log(
+        "[StorageClient] uploadBlobTree response status:",
+        response.status,
+      );
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error("[StorageClient] uploadBlobTree error body:", errorText);
         const error = new Error(
           `Failed to upload blob tree: ${response.status} ${response.statusText} - ${errorText}`,
         );
         // Add response status for retry logic
         (error as any).response = { status: response.status };
         throw error;
+      }
+
+      // Log the full response for debugging
+      try {
+        const responseText = await response.clone().text();
+        console.log("UPLOAD_RESPONSE", responseText);
+      } catch (_) {
+        // ignore clone errors
       }
     });
   }
@@ -478,6 +493,10 @@ export class StorageClient {
     private readonly projectId: string,
     private readonly agent: HttpAgent,
   ) {
+    console.log(
+      "[StorageClient] initialized with gateway URL:",
+      storageGatewayUrl,
+    );
     this.storageGatewayClient = new StorageGatewayClient(storageGatewayUrl);
   }
 
@@ -487,12 +506,70 @@ export class StorageClient {
       methodName: "_caffeineStorageCreateCertificate",
       arg: args,
     });
-    const respone = result.response.body;
-    if (isV3ResponseBody(respone)) {
-      console.log("Certificate:", respone.certificate);
-      return respone.certificate;
+    const responseBody = result.response.body;
+
+    // Log full response for debugging
+    try {
+      console.log(
+        "UPLOAD_RESPONSE (certificate call)",
+        JSON.stringify(responseBody),
+      );
+    } catch (_) {
+      console.log(
+        "UPLOAD_RESPONSE (certificate call) [not serializable]",
+        responseBody,
+      );
     }
-    throw new Error("Expected v3 response body");
+
+    // v3 response format: certificate is directly in the body
+    if (isV3ResponseBody(responseBody)) {
+      console.log("[StorageClient] getCertificate: v3 response format");
+      return responseBody.certificate;
+    }
+
+    // Non-v3 / v2 response format: certificate is Candid-encoded in reply.arg
+    const body = responseBody as any;
+    if (body && typeof body === "object") {
+      // Try reply.arg (v2 IC response format)
+      const replyArg = body?.reply?.arg;
+      if (replyArg) {
+        try {
+          console.log(
+            "[StorageClient] getCertificate: decoding from reply.arg",
+          );
+          const decoded = IDL.decode(
+            [IDL.Vec(IDL.Nat8)],
+            replyArg instanceof ArrayBuffer
+              ? new Uint8Array(replyArg)
+              : new Uint8Array(replyArg as ArrayBufferLike),
+          );
+          if (decoded[0] instanceof Uint8Array) {
+            return decoded[0];
+          }
+          if (Array.isArray(decoded[0])) {
+            return new Uint8Array(decoded[0] as number[]);
+          }
+        } catch (decodeErr) {
+          console.warn(
+            "[StorageClient] getCertificate: failed to decode reply.arg:",
+            decodeErr,
+          );
+        }
+      }
+
+      // Try certificate field directly (some proxy formats)
+      if (body.certificate instanceof Uint8Array) {
+        return body.certificate;
+      }
+      if (Array.isArray(body.certificate)) {
+        return new Uint8Array(body.certificate as number[]);
+      }
+    }
+
+    // Nothing worked — throw with full response details so the error is visible
+    throw new Error(
+      `Certificate extraction failed. Raw response: ${JSON.stringify(responseBody)}`,
+    );
   }
 
   public async putFile(
