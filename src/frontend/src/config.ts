@@ -7,7 +7,7 @@ import {
 import { StorageClient } from "./utils/StorageClient";
 import { HttpAgent } from "@icp-sdk/core/agent";
 
-const DEFAULT_STORAGE_GATEWAY_URL = "https://blob.caffeine.ai";
+const STORAGE_URL = "https://blob.caffeine.ai";
 const DEFAULT_BUCKET_NAME = "default-bucket";
 const DEFAULT_PROJECT_ID = "0000000-0000-0000-0000-00000000000";
 
@@ -30,29 +30,28 @@ interface Config {
 let configCache: Config | null = null;
 
 export async function loadConfig(): Promise<Config> {
-  if (configCache) {
-    return configCache;
-  }
+  if (configCache) return configCache;
+
   const backendCanisterId = process.env.CANISTER_ID_BACKEND;
   const envBaseUrl = process.env.BASE_URL || "/";
   const baseUrl = envBaseUrl.endsWith("/") ? envBaseUrl : `${envBaseUrl}/`;
+
   try {
     const response = await fetch(`${baseUrl}env.json`);
     const config = (await response.json()) as JsonConfig;
+
     if (!backendCanisterId && config.backend_canister_id === "undefined") {
-      console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
 
-    const fullConfig = {
+    const fullConfig: Config = {
       backend_host:
         config.backend_host === "undefined" ? undefined : config.backend_host,
-      backend_canister_id: (config.backend_canister_id === "undefined"
-        ? backendCanisterId
-        : config.backend_canister_id) as string,
-      // Always hardcode the storage gateway URL — process.env.STORAGE_GATEWAY_URL
-      // is never available in the browser and previously defaulted to "nogateway".
-      storage_gateway_url: DEFAULT_STORAGE_GATEWAY_URL,
+      backend_canister_id:
+        config.backend_canister_id === "undefined"
+          ? backendCanisterId!
+          : config.backend_canister_id,
+      storage_gateway_url: STORAGE_URL,
       bucket_name: DEFAULT_BUCKET_NAME,
       project_id:
         config.project_id !== "undefined"
@@ -63,48 +62,52 @@ export async function loadConfig(): Promise<Config> {
           ? undefined
           : config.ii_derivation_origin,
     };
+
+    console.log("CONFIG LOADED:", fullConfig);
+
     configCache = fullConfig;
     return fullConfig;
-  } catch {
+  } catch (err) {
+    console.error("CONFIG LOAD FAILED:", err);
+
     if (!backendCanisterId) {
-      console.error("CANISTER_ID_BACKEND is not set");
       throw new Error("CANISTER_ID_BACKEND is not set");
     }
-    const fallbackConfig = {
+
+    return {
       backend_host: undefined,
       backend_canister_id: backendCanisterId,
-      storage_gateway_url: DEFAULT_STORAGE_GATEWAY_URL,
+      storage_gateway_url: STORAGE_URL,
       bucket_name: DEFAULT_BUCKET_NAME,
       project_id: DEFAULT_PROJECT_ID,
       ii_derivation_origin: undefined,
     };
-    return fallbackConfig;
   }
 }
 
 function extractAgentErrorMessage(error: string): string {
-  const errorString = String(error);
-  const match = errorString.match(/with message:\s*'([^']+)'/s);
-  return match ? match[1] : errorString;
+  const match = error.match(/with message:\s*'([^']+)'/s);
+  return match ? match[1] : error;
 }
 
 function processError(e: unknown): never {
   if (e && typeof e === "object" && "message" in e) {
-    throw new Error(extractAgentErrorMessage(`${e.message}`));
+    const msg = extractAgentErrorMessage(String(e.message));
+
+    if (msg.includes("IC0508")) {
+      throw new Error("Storage backend is stopped");
+    }
+
+    throw new Error(msg);
   }
   throw e;
 }
 
 async function maybeLoadMockBackend(): Promise<backendInterface | null> {
-  if (import.meta.env.VITE_USE_MOCK !== "true") {
-    return null;
-  }
+  if (import.meta.env.VITE_USE_MOCK !== "true") return null;
 
   try {
-    // If VITE_USE_MOCK is enabled, try to load a mock backend module *if it exists*.
-    // We use import.meta.glob so builds don't fail when the mock file is absent.
     const mockModules = import.meta.glob("./mocks/backend.{ts,tsx,js,jsx}");
-
     const path = Object.keys(mockModules)[0];
     if (!path) return null;
 
@@ -121,31 +124,19 @@ async function maybeLoadMockBackend(): Promise<backendInterface | null> {
 export async function createActorWithConfig(
   options?: CreateActorOptions,
 ): Promise<backendInterface> {
-  // Attempt to load mock backend if enabled
   const mock = await maybeLoadMockBackend();
-  if (mock) {
-    return mock;
-  }
+  if (mock) return mock;
 
   const config = await loadConfig();
-  const resolvedOptions = options ?? {};
+
   const agent = new HttpAgent({
-    ...resolvedOptions.agentOptions,
+    ...(options?.agentOptions || {}),
     host: config.backend_host,
   });
+
   if (config.backend_host?.includes("localhost")) {
-    await agent.fetchRootKey().catch((err) => {
-      console.warn(
-        "Unable to fetch root key. Check to ensure that your local replica is running",
-      );
-      console.error(err);
-    });
+    await agent.fetchRootKey().catch(console.error);
   }
-  const actorOptions = {
-    ...resolvedOptions,
-    agent: agent,
-    processError,
-  };
 
   const storageClient = new StorageClient(
     config.bucket_name,
@@ -155,20 +146,32 @@ export async function createActorWithConfig(
     agent,
   );
 
-  const MOTOKO_DEDUPLICATION_SENTINEL = "!caf!";
+  const SENTINEL = "!caf!";
 
   const uploadFile = async (file: ExternalBlob): Promise<Uint8Array> => {
-    const { hash } = await storageClient.putFile(
-      await file.getBytes(),
-      file.onProgress,
-    );
-    return new TextEncoder().encode(MOTOKO_DEDUPLICATION_SENTINEL + hash);
+    console.log("Uploading file to:", config.storage_gateway_url);
+
+    try {
+      const { hash } = await storageClient.putFile(
+        await file.getBytes(),
+        file.onProgress,
+      );
+
+      return new TextEncoder().encode(SENTINEL + hash);
+    } catch (err) {
+      console.error("UPLOAD ERROR:", err);
+      throw err;
+    }
   };
 
   const downloadFile = async (bytes: Uint8Array): Promise<ExternalBlob> => {
-    const hashWithPrefix = new TextDecoder().decode(new Uint8Array(bytes));
-    const hash = hashWithPrefix.substring(MOTOKO_DEDUPLICATION_SENTINEL.length);
+    const decoded = new TextDecoder().decode(bytes);
+    const hash = decoded.replace(SENTINEL, "");
+
     const url = await storageClient.getDirectURL(hash);
+
+    console.log("Downloading from:", url);
+
     return ExternalBlob.fromURL(url);
   };
 
@@ -176,6 +179,10 @@ export async function createActorWithConfig(
     config.backend_canister_id,
     uploadFile,
     downloadFile,
-    actorOptions,
+    {
+      ...options,
+      agent,
+      processError,
+    },
   );
 }
