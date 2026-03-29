@@ -90,6 +90,12 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface Sponsor {
+    id: bigint;
+    name: string;
+    mediaUrl: string;
+    mediaType: string;
+}
 export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     checkTransactionId(txId: string): Promise<boolean>;
@@ -120,4 +126,7 @@ export interface backendInterface {
     updatePaymentStatus(regId: bigint, status: string): Promise<void>;
     updateQuestion(question: Question): Promise<void>;
     _initializeAccessControlWithSecret(secret: string): Promise<void>;
+    addSponsor(name: string, mediaUrl: string, mediaType: string): Promise<bigint>;
+    deleteSponsor(id: bigint): Promise<boolean>;
+    getSponsors(): Promise<Array<Sponsor>>;
 }

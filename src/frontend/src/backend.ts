@@ -172,6 +172,12 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface Sponsor {
+    id: bigint;
+    name: string;
+    mediaUrl: string;
+    mediaType: string;
+}
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
@@ -202,6 +208,9 @@ export interface backendInterface {
     updateGame(game: GameTile): Promise<void>;
     updatePaymentStatus(regId: bigint, status: string): Promise<void>;
     updateQuestion(question: Question): Promise<void>;
+    addSponsor(name: string, mediaUrl: string, mediaType: string): Promise<bigint>;
+    deleteSponsor(id: bigint): Promise<boolean>;
+    getSponsors(): Promise<Array<Sponsor>>;
 }
 import type { StripeSessionStatus as _StripeSessionStatus, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -595,6 +604,48 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.updatePaymentStatus(arg0, arg1);
+            return result;
+        }
+    }
+    async addSponsor(arg0: string, arg1: string, arg2: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addSponsor(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addSponsor(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async deleteSponsor(arg0: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteSponsor(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteSponsor(arg0);
+            return result;
+        }
+    }
+    async getSponsors(): Promise<Array<Sponsor>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSponsors();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSponsors();
             return result;
         }
     }
